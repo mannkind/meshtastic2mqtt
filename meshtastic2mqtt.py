@@ -5,12 +5,20 @@ import time
 import threading
 import meshtastic.ble_interface
 from pubsub import pub
-from meshtastic.protobuf import mqtt_pb2, config_pb2
+from meshtastic.protobuf import mqtt_pb2, config_pb2, portnums_pb2
 import paho.mqtt.client as paho
 
 LORA_MQTT_PUBSUB_TOPIC = "lopa2mqtt.publish"
 APP_EXIT = "meshtastic2mqtt.exit"
-
+ALLOWED_PORT_NUMS = set(
+    [
+        portnums_pb2.PortNum.Name(portnums_pb2.PortNum.NODEINFO_APP),
+        portnums_pb2.PortNum.Name(portnums_pb2.PortNum.TEXT_MESSAGE_APP),
+        portnums_pb2.PortNum.Name(portnums_pb2.PortNum.POSITION_APP),
+        portnums_pb2.PortNum.Name(portnums_pb2.PortNum.TELEMETRY_APP),
+        portnums_pb2.PortNum.Name(portnums_pb2.PortNum.MAP_REPORT_APP),
+    ]
+)
 
 def onMqttConnect(
     client: paho.Client, userdata, flags, reason_code, properties
@@ -96,6 +104,10 @@ def onMeshtasticReceive(
     logging.debug(f"{packet}\n\n")
     if "raw" not in packet or "decoded" not in packet:
         logging.info("Cannot get raw or decoded packet; skipping")
+        return
+
+    if packet["decoded"]["portnum"] not in ALLOWED_PORT_NUMS:
+        logging.info(f"Skipping {packet['decoded']['portnum']}")
         return
 
     skipMqtt = (
