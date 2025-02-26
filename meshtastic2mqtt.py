@@ -5,7 +5,7 @@ import time
 import threading
 import meshtastic.ble_interface
 from pubsub import pub
-from meshtastic.protobuf import mqtt_pb2, config_pb2, portnums_pb2
+from meshtastic.protobuf import mqtt_pb2, config_pb2, channel_pb2, portnums_pb2
 import paho.mqtt.client as paho
 
 LORA_MQTT_PUBSUB_TOPIC = "lopa2mqtt.publish"
@@ -19,6 +19,7 @@ ALLOWED_PORT_NUMS = set(
         portnums_pb2.PortNum.Name(portnums_pb2.PortNum.MAP_REPORT_APP),
     ]
 )
+
 
 def onMqttConnect(
     client: paho.Client, userdata, flags, reason_code, properties
@@ -44,11 +45,11 @@ def onMqttPublishRF(
     client: paho.Client,
     se: mqtt_pb2.ServiceEnvelope,
     topicBase: str,
-    channelId: str,
-    gatewayId: str,
 ) -> None:
     """Communication between the Meshtastic client and MQTT client."""
-    client.publish(f"{topicBase}/{channelId}/{gatewayId}", se.SerializeToString())
+    client.publish(
+        f"{topicBase}/{se.channel_id}/{se.gateway_id}", se.SerializeToString()
+    )
 
 
 def setupMQTT(
@@ -97,8 +98,8 @@ def onMeshtasticExit(interface: meshtastic.ble_interface.BLEInterface) -> None:
 def onMeshtasticReceive(
     packet,
     interface: meshtastic.ble_interface.BLEInterface,
-    channelId: str,
     gatewayId: str,
+    channels: dict[int, str],
 ) -> None:
     """Callback for when the Meshtastic client receives a packet from the radio."""
     logging.debug(f"{packet}\n\n")
@@ -110,6 +111,17 @@ def onMeshtasticReceive(
         logging.info(f"Skipping {packet['decoded']['portnum']}")
         return
 
+    # Map the channel index to a channel name
+    channelIdx = 0
+    if "channel" in packet:
+        channelIdx = packet["channel"]
+
+    if channelIdx not in channels:
+        logging.info(
+            f"Received {packet['decoded']['portnum']} on unknown channel {channelIdx}"
+        )
+        return
+
     skipMqtt = (
         "decoded" in packet
         and "bitfield" in packet["decoded"]
@@ -117,22 +129,20 @@ def onMeshtasticReceive(
     )
     if skipMqtt:
         logging.info(
-            f"Received {packet['decoded']['portnum']} from radio; does not want to be published to MQTT"
+            f"Received {packet['decoded']['portnum']} on {channels[channelIdx]}; does not want to be published to MQTT"
         )
         return
 
     logging.info(
-        f"Received {packet['decoded']['portnum']} from the radio; republishing on MQTT"
+        f"Received {packet['decoded']['portnum']} on {channels[channelIdx]} from the radio; republishing on MQTT"
     )
     mp = packet["raw"]
     se = mqtt_pb2.ServiceEnvelope()
     se.packet.CopyFrom(mp)
-    se.channel_id = channelId
+    se.channel_id = channels[channelIdx]
     se.gateway_id = gatewayId
 
-    pub.sendMessage(
-        LORA_MQTT_PUBSUB_TOPIC, se=se, channelId=channelId, gatewayId=gatewayId
-    )
+    pub.sendMessage(LORA_MQTT_PUBSUB_TOPIC, se=se)
 
 
 def fetchServiceEnvelopeDetails(
@@ -141,14 +151,28 @@ def fetchServiceEnvelopeDetails(
     """Fetches the channel ID and gateway ID from the Meshtastic client."""
     node = interface.getNode("^local")
     modemPreset = node.localConfig.lora.modem_preset
-    channelId = (
+    gatewayId = interface.getMyUser()["id"]
+    defaultChannelName = (
         config_pb2._CONFIG_LORACONFIG_MODEMPRESET.values_by_number[modemPreset]
         .name.title()
         .replace("_", "")
     )
-    gatewayId = interface.getMyUser()["id"]
+    channels: dict[int, str] = {}
+    for channel in node.channels:
+        idx = channel.index
+        if channel.role == channel_pb2.Channel.Role.DISABLED:
+            continue
 
-    return channelId, gatewayId
+        if not channel.settings.uplink_enabled:
+            continue
+
+        name = channel.settings.name
+        if name == "" and channel.role == channel_pb2.Channel.Role.PRIMARY:
+            name = defaultChannelName
+
+        channels[idx] = name
+
+    return gatewayId, channels
 
 
 def checkMeshtasicRadio(
@@ -180,17 +204,15 @@ def setupMeshtastic(bleAddress: str, interval: int) -> None:
         logging.error(f"Failed to connect to the radio; {e}")
         sys.exit(1)
 
-    channelId, gatewayId = fetchServiceEnvelopeDetails(interface)
-    logging.info(
-        f"Connected to the radio; channelId={channelId}, gatewayId={gatewayId}"
-    )
+    gatewayId, channels = fetchServiceEnvelopeDetails(interface)
+    logging.info(f"Connected to the radio; gatewayId={gatewayId}")
 
     # Lora (RF) to MQTT communication channel
     pub.subscribe(
         onMeshtasticReceive,
         "meshtastic.receive",
-        channelId=channelId,
         gatewayId=gatewayId,
+        channels=channels,
     )
 
     # Meshtastic radio communication established; begin background thread to check radio connection
