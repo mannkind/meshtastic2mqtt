@@ -1,4 +1,5 @@
 import logging
+import subprocess
 import sys
 import time
 import threading
@@ -7,12 +8,19 @@ import meshtastic.ble_interface
 from pubsub import pub
 from meshtastic.protobuf import mqtt_pb2, config_pb2, channel_pb2
 
+class publishingState:
+    setupTime: int = 0
+    waitBeforePublishing: int = 37
+    enabled: bool = False
+
+sleepBeforeConnectionAttempt = 10
 
 def onMeshtasticConnect(
     interface: meshtastic.ble_interface.BLEInterface, rfBgThread: threading.Thread
 ) -> None:
     """Callback for when the Meshtastic client connects to the radio."""
     logging.info(f"Connected to Meshtastic")
+    publishingState.setupTime = time.time()
     rfBgThread.start()
 
 
@@ -35,6 +43,8 @@ def onMeshtasticReceive(
     channels: dict[int, str],
 ) -> None:
     """Callback for when the Meshtastic client receives a packet from the radio."""
+    global publishingState
+
     logging.debug(f"{packet}\n\n")
     if "raw" not in packet or "decoded" not in packet:
         logging.info("Cannot get raw or decoded packet; skipping")
@@ -74,6 +84,20 @@ def onMeshtasticReceive(
     se.packet.CopyFrom(mp)
     se.channel_id = channels[channelIdx]
     se.gateway_id = gatewayId
+
+    # Wait a bit before publishing to dump any enqueued/old packets
+    if not publishingState.enabled:
+        now = time.time()
+        diff = now - publishingState.setupTime
+        if diff < publishingState.waitBeforePublishing:
+            logging.info(
+                f"MQTT publishing disabled; waiting {int(publishingState.waitBeforePublishing - diff)}s"
+            )
+            return
+        else:
+            publishingState.enabled = True
+            logging.info("MQTT publishing enabled")
+
 
     pub.sendMessage(LORA_MQTT_PUBSUB_TOPIC, se=se.SerializeToString(), channelId=se.channel_id, gatewayId=se.gateway_id)
 
@@ -131,6 +155,13 @@ def checkMeshtasicRadio(
 
 def setupMeshtastic(bleAddress: str, interval: int) -> None:
     """ "Sets up the Meshtastic interface and subscribes to events."""
+    try:
+        subprocess.run(["bluetoothctl", "disconnect", bleAddress], capture_output=False, check=True)
+    except Exception as e:
+        logging.error(f"Failed to disconnect from the radio; {e}")
+
+    time.sleep(sleepBeforeConnectionAttempt)
+
     try:
         interface = meshtastic.ble_interface.BLEInterface(bleAddress, noNodes=True)
     except Exception as e:

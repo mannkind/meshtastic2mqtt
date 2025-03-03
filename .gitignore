@@ -3,3 +3,4 @@ bin
 obj
 output
 TestResults
+__pycache__
