@@ -2,6 +2,9 @@ import logging
 from lib.shared import APP_EXIT, LORA_MQTT_PUBSUB_TOPIC
 from pubsub import pub
 import paho.mqtt.client as paho
+from paho.mqtt.enums import MQTTErrorCode
+
+
 
 
 def onMqttConnect(
@@ -32,7 +35,9 @@ def onMqttPublishRF(
     topicBase: str,
 ) -> None:
     """Communication between the Meshtastic client and MQTT client."""
-    client.publish(f"{topicBase}/{channelId}/{gatewayId}", se)
+    result = client.publish(f"{topicBase}/{channelId}/{gatewayId}", se)
+    if result.rc != MQTTErrorCode.MQTT_ERR_SUCCESS:
+        logging.error(f"Failed to publish to MQTT; {result}")
 
 
 def setupMQTT(
@@ -40,6 +45,7 @@ def setupMQTT(
 ) -> paho.Client:
     """Sets up the MQTT client and subscribes to events."""
     client = paho.Client(paho.CallbackAPIVersion.VERSION2)
+    client.max_queued_messages_set(0)
     client.on_connect = onMqttConnect
     client.on_disconnect = onMqttDisconnect
     client.username_pw_set(mqttUsername, mqttPassword)
