@@ -44,7 +44,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           push: true
-          platforms: "linux/amd64,linux/arm64,linux/arm/v7"
+          platforms: "linux/amd64,linux/arm64"
           build-args: |
           tags: "mannkind/meshtastic2mqtt:dev"
         
@@ -53,6 +53,6 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           push: true
-          platforms: "linux/amd64,linux/arm64,linux/arm/v7"
+          platforms: "linux/amd64,linux/arm64"
           build-args: |
           tags: "mannkind/meshtastic2mqtt:latest,ghcr.io/mannkind/meshtastic2mqtt:latest"
