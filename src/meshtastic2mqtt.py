@@ -4,6 +4,7 @@ import os
 from lib.meshtastic import setupMeshtastic
 from lib.mqtt import setupMQTT
 
+
 def main() -> None:
     # Setup logging
     logging.basicConfig(
@@ -17,7 +18,6 @@ def main() -> None:
     mqttPort = int(os.environ.get("MESHTASTIC2MQTT_MQTT_PORT", "1883"))
     mqttUsername = os.environ.get("MESHTASTIC2MQTT_MQTT_USERNAME", "meshdev")
     mqttPassword = os.environ.get("MESHTASTIC2MQTT_MQTT_PASSWORD", "large4cats")
-    mqttTopicBase = os.environ.get("MESHTASTIC2MQTT_MQTT_TOPIC_BASE", "msh/US/2/e")
     bleInterval = int(os.environ.get("MESHTASTIC2MQTT_MESHTASTIC_INTERVAL", "67"))
     bleAddress = os.environ.get(
         "MESHTASTIC2MQTT_MESHTASTIC_ADDRESS", "CF:B0:EF:3C:15:0A"
@@ -25,9 +25,7 @@ def main() -> None:
 
     # Setup MQTT
     logging.info("Starting setup of MQTT")
-    mqttClient = setupMQTT(
-        mqttHost, mqttPort, mqttUsername, mqttPassword, mqttTopicBase
-    )
+    mqttClient = setupMQTT(mqttHost, mqttPort, mqttUsername, mqttPassword)
     logging.info("Finished setup of MQTT")
 
     # Setup meshtastic

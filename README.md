@@ -9,6 +9,12 @@ bluetoothctl pair "$BLEADDRESS"
 bluetoothctl disconnect "$BLEADDRESS"
 ```
 
+## Configure your node
+
+Settings -> MQTT
+* Enable MQTT
+* Enable MQTT Client Proxy
+
 ## Running
 I'm running this on an Raspberry Pi with only the basics installed.
 
