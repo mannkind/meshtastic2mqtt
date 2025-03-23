@@ -38,6 +38,10 @@ def onMqttPublishRF(
 
 def setupMQTT(mqttHost, mqttPort, mqttUsername, mqttPassword) -> paho.Client:
     """Sets up the MQTT client and subscribes to events."""
+    logging.info(
+        f"Connecting to MQTT {mqttHost}:{mqttPort} using {mqttUsername} w/password {'redacted' if mqttPassword else 'no password'}"
+    )
+
     client = paho.Client(paho.CallbackAPIVersion.VERSION2)
     client.max_queued_messages_set(0)
     client.on_connect = onMqttConnect

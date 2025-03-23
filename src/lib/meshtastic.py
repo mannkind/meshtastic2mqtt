@@ -5,7 +5,7 @@ import time
 import threading
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-from lib.shared import APP_EXIT, LORA_MQTT_PUBSUB_TOPIC
+from lib.shared import APP_EXIT, LORA_MQTT_PUBSUB_TOPIC, mqttOpts
 import meshtastic.ble_interface
 from pubsub import pub
 from meshtastic.protobuf import (
@@ -118,6 +118,26 @@ def getChannelInfo(
     return channels
 
 
+def getMQTTInfo(
+    interface: meshtastic.ble_interface.BLEInterface,
+) -> dict[str, str]:
+    """Fetches the MQTT information setup in the node."""
+    node = interface.getNode("^local")
+    config = node.moduleConfig.mqtt
+
+    address = config.address
+    opts: mqttOpts = mqttOpts(
+        enabled=config.enabled,
+        proxy_to_client_enabled=config.proxy_to_client_enabled,
+        host=address.split(":", 1)[0],
+        port=address.split(":", 1)[1] if ":" in address else "1883",
+        username=config.username,
+        password=config.password,
+    )
+
+    return opts
+
+
 def checkMeshtasicRadio(
     interface: meshtastic.ble_interface.BLEInterface, interval: int
 ) -> None:
@@ -159,6 +179,9 @@ def setupMeshtastic(bleAddress: str, interval: int) -> None:
     channels = getChannelInfo(interface)
     logging.info(f"Connected to the radio")
 
+    logging.info(f"Getting MQTT information")
+    mqtt = getMQTTInfo(interface)
+
     # Meshtastic radio communication established; begin background thread to check radio connection
     rfBgThread = threading.Thread(
         target=lambda: checkMeshtasicRadio(interface, interval)
@@ -179,7 +202,7 @@ def setupMeshtastic(bleAddress: str, interval: int) -> None:
     # Application exit communication channel
     pub.subscribe(onMeshtasticExit, APP_EXIT, interface=interface)
 
-    return interface
+    return interface, mqtt
 
 
 def _logOnMeshtasticReceive(

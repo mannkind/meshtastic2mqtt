@@ -14,24 +14,30 @@ def main() -> None:
     )
 
     # Setup environment variables
-    mqttHost = os.environ.get("MESHTASTIC2MQTT_MQTT_HOST", "mqtt.davekeogh.com")
-    mqttPort = int(os.environ.get("MESHTASTIC2MQTT_MQTT_PORT", "1883"))
-    mqttUsername = os.environ.get("MESHTASTIC2MQTT_MQTT_USERNAME", "meshdev")
-    mqttPassword = os.environ.get("MESHTASTIC2MQTT_MQTT_PASSWORD", "large4cats")
     bleInterval = int(os.environ.get("MESHTASTIC2MQTT_MESHTASTIC_INTERVAL", "67"))
     bleAddress = os.environ.get(
         "MESHTASTIC2MQTT_MESHTASTIC_ADDRESS", "CF:B0:EF:3C:15:0A"
     )
 
+    # Setup meshtastic
+    logging.info("Starting setup of Meshtastic")
+    interface, mqttOpts = setupMeshtastic(bleAddress, bleInterval)
+    logging.info(f"Finished setup of Meshtastic")
+
+    if not mqttOpts.enabled or not mqttOpts.proxy_to_client_enabled:
+        logging.info("MQTT is not enabled on the radio; exiting")
+        sys.exit(0)
+
+    # Setup environment variables
+    mqttHost = os.environ.get("MESHTASTIC2MQTT_MQTT_HOST", mqttOpts.host)
+    mqttPort = int(os.environ.get("MESHTASTIC2MQTT_MQTT_PORT", mqttOpts.port))
+    mqttUsername = os.environ.get("MESHTASTIC2MQTT_MQTT_USERNAME", mqttOpts.username)
+    mqttPassword = os.environ.get("MESHTASTIC2MQTT_MQTT_PASSWORD", mqttOpts.password)
+
     # Setup MQTT
     logging.info("Starting setup of MQTT")
     mqttClient = setupMQTT(mqttHost, mqttPort, mqttUsername, mqttPassword)
     logging.info("Finished setup of MQTT")
-
-    # Setup meshtastic
-    logging.info("Starting setup of Meshtastic")
-    interface = setupMeshtastic(bleAddress, bleInterval)
-    logging.info(f"Finished setup of Meshtastic")
 
     # Loop forever
     logging.info("Running application; waiting for messages from the radio")
