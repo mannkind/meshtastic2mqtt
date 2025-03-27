@@ -14,7 +14,7 @@ def main() -> None:
     )
 
     # Setup environment variables
-    bleInterval = int(os.environ.get("MESHTASTIC2MQTT_MESHTASTIC_INTERVAL", "67"))
+    bleInterval = int(os.environ.get("MESHTASTIC2MQTT_MESHTASTIC_INTERVAL", "307"))
     bleAddress = os.environ.get(
         "MESHTASTIC2MQTT_MESHTASTIC_ADDRESS", "CF:B0:EF:3C:15:0A"
     )
